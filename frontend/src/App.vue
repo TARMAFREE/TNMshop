@@ -5,21 +5,28 @@
         <RouterLink to="/" class="logo">TNMshop</RouterLink>
       </div>
 
-      <!-- แสดง Nav เมื่อ:
-           - customer/admin (ล็อกอินแล้ว) แสดงเสมอ
-           - guest แสดงเฉพาะหน้า shopping -->
       <nav v-if="showNav" class="nav">
         <!-- Guest -->
         <template v-if="role === 'guest'">
-          <RouterLink to="/shop" class="navlink">Shop</RouterLink>
+          <!-- ✅ หน้า Login/Admin/Register: โชว์ Home อย่างเดียว -->
+          <template v-if="showHomeNavOnly">
+            <RouterLink to="/" class="navlink">Home</RouterLink>
+          </template>
 
-          <a href="#" class="navlink" @click.prevent="cart.openCart()">
-            Cart <span v-if="cart.count">({{ cart.count }})</span>
-          </a>
+          <!-- ✅ หน้า Shopping (guest): เพิ่ม Home ด้วย -->
+          <template v-else>
+            <RouterLink to="/" class="navlink">Home</RouterLink>
+            <RouterLink to="/shop" class="navlink">Shop</RouterLink>
+
+            <a href="#" class="navlink" @click.prevent="cart.openCart()">
+              Cart <span v-if="cart.count">({{ cart.count }})</span>
+            </a>
+          </template>
         </template>
 
         <!-- Customer -->
         <template v-else-if="role === 'customer'">
+          <RouterLink to="/" class="navlink">Home</RouterLink>
           <RouterLink to="/shop" class="navlink">Shop</RouterLink>
 
           <a href="#" class="navlink" @click.prevent="cart.openCart()">
@@ -27,12 +34,12 @@
           </a>
 
           <RouterLink to="/account" class="navlink">Account</RouterLink>
-
           <a href="#" class="navlink" @click.prevent="logout">Logout</a>
         </template>
 
         <!-- Admin -->
         <template v-else-if="role === 'admin'">
+          <RouterLink to="/" class="navlink">Home</RouterLink>
           <RouterLink to="/admin" class="navlink">Admin</RouterLink>
           <a href="#" class="navlink" @click.prevent="logout">Logout</a>
         </template>
@@ -64,7 +71,7 @@ const router = useRouter()
 const route = useRoute()
 const year = computed(() => new Date().getFullYear())
 
-// ให้ App อัปเดตทันทีหลัง login/logout (โดยเฉพาะหน้า /admin ที่ไม่เปลี่ยน route)
+// ให้ App อัปเดตทันทีหลัง login/logout
 const authTick = ref(0)
 const bumpAuth = () => (authTick.value += 1)
 
@@ -74,18 +81,36 @@ onUnmounted(() => window.removeEventListener('tnm-auth-changed', bumpAuth))
 const role = computed(() => {
   route.fullPath
   authTick.value
-
   if (adminAuth.getToken()) return 'admin'
   if (customerAuth.getToken()) return 'customer'
   return 'guest'
 })
 
-const showNav = computed(() => {
-  if (role.value === 'guest') return route.meta?.area === 'shopping'
-  return role.value === 'customer' || role.value === 'admin'
+/**
+ * ✅ โชว์ Home เฉพาะหน้า auth (หลังจากกด Customer/Admin)
+ * - /login (customer login)
+ * - /admin (admin login)
+ * - /register (สมัคร)  ถ้าไม่อยากให้มีใน register ลบออกได้
+ */
+const showHomeNavOnly = computed(() => {
+  if (role.value !== 'guest') return false
+  return route.path === '/login' || route.path === '/admin' || route.path === '/register'
 })
 
-// 1) ถ้า Guest กลับหน้า Home ให้รีเซ็ต cart ทันที
+/**
+ * ✅ แสดง Nav เมื่อ:
+ * - customer/admin: แสดงเสมอ (ยกเว้นจะอยากซ่อนในหน้าไหนเพิ่มเอง)
+ * - guest: แสดงเฉพาะหน้า shopping หรือหน้า auth
+ * - หน้าแรก "/" จะไม่แสดง nav
+ */
+const showNav = computed(() => {
+  if (role.value === 'guest') {
+    return route.meta?.area === 'shopping' || showHomeNavOnly.value
+  }
+  return true
+})
+
+// ถ้า Guest กลับหน้า Home ให้รีเซ็ต cart ใน runtime
 watch(
   () => route.path,
   (path) => {
@@ -95,25 +120,20 @@ watch(
   }
 )
 
-// 2) เวลา role เปลี่ยน:
-//    - เป็น customer: ถ้ามีของใน cart (มาจาก guest) ให้เริ่มบันทึก, ถ้าว่างให้โหลดจาก localStorage
-//    - เป็น guest/admin: ล้าง cart ในหน่วยความจำ เพื่อกันข้ามฝั่ง
+// เวลา role เปลี่ยน: customer hydrate/flush, อื่นๆ reset
 watch(
   role,
-  (nextRole, prevRole) => {
+  (nextRole) => {
     if (nextRole === 'customer') {
       if (cart.items.length === 0) cart.hydrate()
       else cart.flush()
       return
     }
-
-    // ออกจาก customer ไปเป็น guest หรือเปลี่ยนเป็น admin ให้ล้างของที่ค้างในหน่วยความจำ
     cart.resetRuntime()
   },
   { immediate: true }
 )
 
-// 3) ถ้าออกจากเว็บ/ปิดแท็บ/ย้อนกลับจาก bfcache (บางเบราว์เซอร์) ให้ล้าง guest cart
 function handlePageHide() {
   if (role.value === 'guest') cart.resetRuntime()
 }
@@ -125,7 +145,6 @@ async function logout() {
   if (role.value === 'admin') await adminAuth.logout()
   if (role.value === 'customer') await customerAuth.logout()
 
-  // logout แล้วถือเป็น guest ต้องไม่เห็นของเดิมใน cart
   cart.resetRuntime()
   router.push('/')
 }
