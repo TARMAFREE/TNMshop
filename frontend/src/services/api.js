@@ -1,6 +1,16 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 const ADMIN_TOKEN_KEY = 'tnm_admin_token'
 
+// ✅ ให้ error มี status + data เพื่อแยก email/password ได้
+class ApiError extends Error {
+  constructor(message, status, data) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
+}
+
 function getAdminToken() {
   return localStorage.getItem(ADMIN_TOKEN_KEY) || ''
 }
@@ -18,7 +28,6 @@ function setAdminToken(token) {
     window.dispatchEvent(new Event('tnm-auth-changed'))
   }
 }
-
 
 async function request(path, options = {}) {
   const mergedHeaders = {
@@ -57,7 +66,7 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const msg = data?.message || `Request failed (${res.status})`
-    throw new Error(msg)
+    throw new ApiError(msg, res.status, data)
   }
 
   return data
@@ -174,7 +183,6 @@ export const adminApi = {
       body: JSON.stringify(payload),
     })
   },
-  
 
   listAdminUsers() {
     return request('/admin/admin-users', { method: 'GET', headers: adminHeaders() })
@@ -217,7 +225,6 @@ function setCustomerToken(token) {
   }
 }
 
-
 function customerHeaders() {
   const token = getCustomerToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
@@ -242,7 +249,6 @@ export const customerAuth = {
     setCustomerToken(token)
     return data
   },
-
 
   async login(email, password) {
     const data = await request('/auth/login', {
@@ -283,6 +289,7 @@ export const customerAuth = {
     setCustomerToken('')
   },
 }
+
 // --------------------
 // Customer API
 // --------------------

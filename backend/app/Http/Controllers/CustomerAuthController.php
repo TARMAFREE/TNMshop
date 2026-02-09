@@ -60,6 +60,10 @@ class CustomerAuthController extends Controller
         $data = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+        ], [
+            'email.required' => 'กรุณากรอกอีเมล',
+            'email.email' => 'รูปแบบอีเมลไม่ถูกต้อง',
+            'password.required' => 'กรุณากรอกรหัสผ่าน',
         ]);
 
         $email = strtolower(trim($data['email']));
@@ -69,8 +73,20 @@ class CustomerAuthController extends Controller
             ->where('is_admin', false)
             ->first();
 
-        if (!$user || !Hash::check($data['password'], $user->password)) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+        // ✅ Email ไม่ถูก (ไม่พบ user หรือเป็น admin)
+        if (!$user) {
+            return response()->json([
+                'field' => 'email',
+                'message' => 'อีเมลผิด',
+            ], 401);
+        }
+
+        // ✅ Password ไม่ถูก
+        if (!Hash::check($data['password'], $user->password)) {
+            return response()->json([
+                'field' => 'password',
+                'message' => 'รหัสผ่านผิด',
+            ], 401);
         }
 
         $token = $user->createToken('customer')->plainTextToken;

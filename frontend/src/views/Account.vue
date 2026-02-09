@@ -13,6 +13,8 @@ const ordersLoading = ref(false)
 const ordersError = ref('')
 const orders = ref([])
 
+const copiedOrderId = ref(null)
+
 function formatDate(v) {
   if (!v) return '-'
   const d = new Date(v)
@@ -31,6 +33,50 @@ function statusText(status) {
   if (s === 'shipped') return 'Shipped'
   if (s === 'paid') return 'Paid'
   return status || '-'
+}
+
+function isShipped(o) {
+  return String(o?.status || '').toLowerCase() === 'shipped'
+}
+
+/**
+ * ลิงก์ไปเช็ค tracking
+ * ตอนนี้ใช้ Google search เพื่อให้ครอบคลุมหลายบริษัทขนส่ง
+ * ถ้าต้องการลิงก์ตรงของแต่ละเจ้า สามารถเปลี่ยนฟังก์ชันนี้ได้
+ */
+function trackingSearchUrl(carrier, tracking) {
+  const q = `${carrier || 'tracking'} ${tracking || ''}`.trim()
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`
+}
+
+async function copyToClipboard(text) {
+  const t = String(text || '')
+  if (!t) return
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(t)
+      return
+    }
+  } catch (_) {}
+
+  // Fallback
+  const ta = document.createElement('textarea')
+  ta.value = t
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  ta.style.pointerEvents = 'none'
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+}
+
+async function onCopyTracking(orderId, trackingNumber) {
+  await copyToClipboard(trackingNumber)
+  copiedOrderId.value = orderId
+  setTimeout(() => {
+    if (copiedOrderId.value === orderId) copiedOrderId.value = null
+  }, 900)
 }
 
 async function loadMe() {
@@ -74,6 +120,7 @@ onMounted(async () => {
   await loadMe()
   await loadOrders()
 })
+
 // --- UI feedback (pop/bounce) ---
 const logoutPop = ref(false)
 const refreshPop = ref(false)
@@ -98,7 +145,6 @@ async function onRefreshClick() {
   pop(refreshPop)
   await loadOrders()
 }
-
 </script>
 
 <template>
@@ -109,14 +155,13 @@ async function onRefreshClick() {
         <div class="row" style="align-items: center;">
           <h1 style="margin: 0;">My Account</h1>
           <button
-  class="btn btn-action"
-  style="margin-left:auto;"
-  :class="{ pop: logoutPop }"
-  @click="onLogoutClick"
->
-  Log out
-</button>
-
+            class="btn btn-action"
+            style="margin-left:auto;"
+            :class="{ pop: logoutPop }"
+            @click="onLogoutClick"
+          >
+            Log out
+          </button>
         </div>
 
         <div class="hr"></div>
@@ -154,15 +199,14 @@ async function onRefreshClick() {
           </div>
 
           <button
-  class="btn btn-action"
-  style="margin-left:auto;"
-  :class="{ pop: refreshPop }"
-  @click="onRefreshClick"
-  :disabled="ordersLoading"
->
-  {{ ordersLoading ? 'Refreshing...' : 'Refresh' }}
-</button>
-
+            class="btn btn-action"
+            style="margin-left:auto;"
+            :class="{ pop: refreshPop }"
+            @click="onRefreshClick"
+            :disabled="ordersLoading"
+          >
+            {{ ordersLoading ? 'Refreshing...' : 'Refresh' }}
+          </button>
         </div>
 
         <div class="hr"></div>
@@ -187,11 +231,38 @@ async function onRefreshClick() {
                   <div class="muted" style="font-size: 12px;">
                     {{ formatDate(o.created_at) }}
                   </div>
+
+                  <!-- Tracking (quick access) -->
+                  <div
+                    v-if="o.tracking_number"
+                    class="muted"
+                    style="font-size: 12px; margin-top: 6px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;"
+                  >
+                    <span>
+                      Tracking: <strong>{{ o.tracking_number }}</strong>
+                    </span>
+                    <button
+                      class="btn btn-mini"
+                      @click.stop.prevent="onCopyTracking(o.id, o.tracking_number)"
+                      :aria-label="'Copy tracking number ' + o.tracking_number"
+                    >
+                      {{ copiedOrderId === o.id ? 'Copied' : 'Copy' }}
+                    </button>
+                    <a
+                      class="link"
+                      :href="trackingSearchUrl(o.shipping_carrier, o.tracking_number)"
+                      target="_blank"
+                      rel="noopener"
+                      @click.stop
+                    >
+                      Check tracking
+                    </a>
+                  </div>
                 </div>
 
                 <div style="margin-left: auto; text-align: right;">
                   <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
-                    <span class="badge" :class="String(o.status).toLowerCase() === 'shipped' ? 'ok' : 'no'">
+                    <span class="badge" :class="isShipped(o) ? 'ok' : 'no'">
                       {{ statusText(o.status) }}
                     </span>
                     <div style="font-weight: 900;">
@@ -211,10 +282,31 @@ async function onRefreshClick() {
                 {{ o.shipping_address || '-' }}
               </div>
 
-              <div v-if="String(o.status).toLowerCase() === 'shipped'" class="muted" style="font-size: 12px;">
-                Carrier: <strong>{{ o.shipping_carrier || '-' }}</strong>
-                · Tracking: <strong>{{ o.tracking_number || '-' }}</strong>
-                · Shipped at: <strong>{{ o.shipped_at ? formatDate(o.shipped_at) : '-' }}</strong>
+              <div
+                v-if="o.tracking_number"
+                class="muted"
+                style="font-size: 12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;"
+              >
+                <span>Carrier: <strong>{{ o.shipping_carrier || '-' }}</strong></span>
+                <span>· Tracking: <strong>{{ o.tracking_number }}</strong></span>
+                <span v-if="o.shipped_at">· Shipped at: <strong>{{ formatDate(o.shipped_at) }}</strong></span>
+
+                <button
+                  class="btn btn-mini"
+                  @click.stop.prevent="onCopyTracking(o.id, o.tracking_number)"
+                >
+                  {{ copiedOrderId === o.id ? 'Copied' : 'Copy tracking' }}
+                </button>
+
+                <a
+                  class="link"
+                  :href="trackingSearchUrl(o.shipping_carrier, o.tracking_number)"
+                  target="_blank"
+                  rel="noopener"
+                  @click.stop
+                >
+                  Check tracking
+                </a>
               </div>
               <div v-else class="muted" style="font-size: 12px;">
                 ยังไม่จัดส่ง / รออัปเดต Tracking
@@ -249,9 +341,8 @@ async function onRefreshClick() {
       </div>
     </div>
   </div>
-  
-  
 </template>
+
 <style scoped>
 /* ทำให้ตัวอักษรปุ่มเป็นสีขาว */
 .btn-action {
@@ -261,6 +352,28 @@ async function onRefreshClick() {
 /* ฟีลกดแล้ว “ยุบ” */
 .btn-action:active {
   transform: translateY(1px) scale(0.98);
+}
+
+/* ปุ่มย่อ (ใช้กับ copy) */
+.btn-mini {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1;
+
+  /* ✅ ให้คำว่า Copy / Copied เป็นสีขาว */
+  color: #fff !important;
+}
+
+/* เผื่อภายในปุ่มมี element อื่น (เช่น span) */
+.btn-mini * {
+  color: #fff !important;
+}
+
+/* ลิงก์ไปเช็ค Tracking */
+.link {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 /* เอฟเฟกต์เด้งตอบโต้ */

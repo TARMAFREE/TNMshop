@@ -9,16 +9,32 @@
           <div class="field">
             <label>Email</label>
             <input v-model.trim="email" type="email" autocomplete="username" placeholder="admin@tnmshop.local" />
+            <div v-if="loginEmailError" class="error" style="margin-top:6px;">
+              {{ loginEmailError }}
+            </div>
           </div>
 
           <div class="field">
             <label>Password</label>
-            <input v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" @keyup.enter="login" />
+            <input
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              @keyup.enter="login"
+            />
+            <div v-if="loginPasswordError" class="error" style="margin-top:6px;">
+              {{ loginPasswordError }}
+            </div>
           </div>
 
           <button class="btn primary" :disabled="loggingIn" @click="login">
             {{ loggingIn ? 'Logging in...' : 'Login' }}
           </button>
+
+          <div v-if="loginError" class="error" style="margin-top:10px;">
+            {{ loginError }}
+          </div>
         </div>
       </section>
 
@@ -30,11 +46,10 @@
           </div>
 
           <div style="margin-left:auto; display:flex; gap:10px;">
-  <RouterLink class="btn" to="/admin/secret-create">Create Admin</RouterLink>
-  <button class="btn" @click="refreshAll" :disabled="loadingProducts">Refresh</button>
-  <button class="btn danger" @click="logout">Logout</button>
-</div>
-
+            <RouterLink class="btn" to="/admin/secret-create">Create Admin</RouterLink>
+            <button class="btn" @click="refreshAll" :disabled="loadingProducts">Refresh</button>
+            <button class="btn danger" @click="logout">Logout</button>
+          </div>
         </div>
 
         <div v-if="error" class="error">{{ error }}</div>
@@ -174,96 +189,95 @@
           </button>
         </div>
       </section>
+
       <section v-if="loggedIn" class="card full" style="margin-top:16px;">
-  <div class="row" style="align-items:center;">
-    <div>
-      <h2 style="margin:0;">Orders</h2>
-      <div class="muted">Paid orders and shipping status.</div>
-    </div>
-
-    <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn" :class="{ primary: orderTab === 'paid' }" @click="setOrderTab('paid')">
-        Paid (not shipped)
-      </button>
-      <button class="btn" :class="{ primary: orderTab === 'shipped' }" @click="setOrderTab('shipped')">
-        Shipped
-      </button>
-      <button class="btn" @click="loadOrders" :disabled="loadingOrders">Refresh orders</button>
-    </div>
-  </div>
-
-  <div v-if="ordersError" class="error" style="margin-top:10px;">{{ ordersError }}</div>
-
-  <div v-if="loadingOrders" class="muted" style="margin-top:10px;">Loading...</div>
-
-  <div v-else style="margin-top:10px;">
-    <div v-if="!orders.length" class="muted">No orders found.</div>
-
-    <div v-else class="list">
-      <div v-for="o in orders" :key="o.id" class="item" style="align-items:flex-start;">
-        <div class="info" style="min-width: 0;">
-          <div class="name" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-            <span>{{ o.order_number }}</span>
-            <span class="pill" :class="o.status === 'shipped' ? 'on' : 'off'">
-              {{ o.status === 'shipped' ? 'Shipped' : 'Paid' }}
-            </span>
+        <div class="row" style="align-items:center;">
+          <div>
+            <h2 style="margin:0;">Orders</h2>
+            <div class="muted">Paid orders and shipping status.</div>
           </div>
 
-          <div class="meta">
-            {{ formatDate(o.created_at) }} · {{ o.customer_name }} · {{ o.customer_email }}<span v-if="o.customer_phone"> · {{ o.customer_phone }}</span>
-          </div>
-
-          <div class="meta" style="margin-top:6px; white-space:pre-wrap;">
-            <strong>Address:</strong> {{ o.shipping_address }}
-          </div>
-
-          <div class="meta" style="margin-top:6px;">
-            <strong>Total:</strong> {{ money(o.total) }} {{ o.currency }}
-          </div>
-
-          <div v-if="o.status === 'shipped'" class="meta" style="margin-top:6px;">
-            <strong>Carrier:</strong> {{ o.shipping_carrier || '-' }} · <strong>Tracking:</strong> {{ o.tracking_number || '-' }}
-          </div>
-        </div>
-
-        <div class="actions" style="min-width: 320px; max-width: 420px; display:flex; flex-direction:column; align-items:stretch; gap:10px;">
-          <template v-if="orderTab === 'paid'">
-            <div class="field" style="margin:0 0 8px 0;">
-              <label class="muted">Shipping company</label>
-              <input class="input" v-model.trim="shipForms[o.id].shipping_carrier" placeholder="e.g., Kerry / Flash / J&T" />
-            </div>
-
-            <div class="field" style="margin:0 0 10px 0;">
-              <label class="muted">Tracking number</label>
-              <input class="input" v-model.trim="shipForms[o.id].tracking_number" placeholder="Tracking number" />
-            </div>
-
-            <button class="btn primary" :disabled="shipBusyId === o.id" @click="markShipped(o)">
-              {{ shipBusyId === o.id ? 'Saving...' : 'Mark as shipped' }}
+          <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn" :class="{ primary: orderTab === 'paid' }" @click="setOrderTab('paid')">
+              Paid (not shipped)
             </button>
-
-            <div v-if="shipErrors[o.id]" class="muted" style="margin-top:8px; color:var(--danger);">
-              {{ shipErrors[o.id] }}
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="muted" style="font-size:12px;">
-              Carrier: <strong>{{ o.shipping_carrier || '-' }}</strong>
-            </div>
-            <div class="muted" style="font-size:12px; margin-top:6px;">
-              Tracking: <strong>{{ o.tracking_number || '-' }}</strong>
-            </div>
-            <div class="muted" style="font-size:12px; margin-top:6px;">
-              Shipped at: <strong>{{ o.shipped_at ? formatDate(o.shipped_at) : '-' }}</strong>
-            </div>
-          </template>
+            <button class="btn" :class="{ primary: orderTab === 'shipped' }" @click="setOrderTab('shipped')">
+              Shipped
+            </button>
+            <button class="btn" @click="loadOrders" :disabled="loadingOrders">Refresh orders</button>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
-</section>
 
+        <div v-if="ordersError" class="error" style="margin-top:10px;">{{ ordersError }}</div>
+        <div v-if="loadingOrders" class="muted" style="margin-top:10px;">Loading...</div>
+
+        <div v-else style="margin-top:10px;">
+          <div v-if="!orders.length" class="muted">No orders found.</div>
+
+          <div v-else class="list">
+            <div v-for="o in orders" :key="o.id" class="item" style="align-items:flex-start;">
+              <div class="info" style="min-width: 0;">
+                <div class="name" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                  <span>{{ o.order_number }}</span>
+                  <span class="pill" :class="o.status === 'shipped' ? 'on' : 'off'">
+                    {{ o.status === 'shipped' ? 'Shipped' : 'Paid' }}
+                  </span>
+                </div>
+
+                <div class="meta">
+                  {{ formatDate(o.created_at) }} · {{ o.customer_name }} · {{ o.customer_email }}<span v-if="o.customer_phone"> · {{ o.customer_phone }}</span>
+                </div>
+
+                <div class="meta" style="margin-top:6px; white-space:pre-wrap;">
+                  <strong>Address:</strong> {{ o.shipping_address }}
+                </div>
+
+                <div class="meta" style="margin-top:6px;">
+                  <strong>Total:</strong> {{ money(o.total) }} {{ o.currency }}
+                </div>
+
+                <div v-if="o.status === 'shipped'" class="meta" style="margin-top:6px;">
+                  <strong>Carrier:</strong> {{ o.shipping_carrier || '-' }} · <strong>Tracking:</strong> {{ o.tracking_number || '-' }}
+                </div>
+              </div>
+
+              <div class="actions" style="min-width: 320px; max-width: 420px; display:flex; flex-direction:column; align-items:stretch; gap:10px;">
+                <template v-if="orderTab === 'paid'">
+                  <div class="field" style="margin:0 0 8px 0;">
+                    <label class="muted">Shipping company</label>
+                    <input class="input" v-model.trim="shipForms[o.id].shipping_carrier" placeholder="e.g., Kerry / Flash / J&T" />
+                  </div>
+
+                  <div class="field" style="margin:0 0 10px 0;">
+                    <label class="muted">Tracking number</label>
+                    <input class="input" v-model.trim="shipForms[o.id].tracking_number" placeholder="Tracking number" />
+                  </div>
+
+                  <button class="btn primary" :disabled="shipBusyId === o.id" @click="markShipped(o)">
+                    {{ shipBusyId === o.id ? 'Saving...' : 'Mark as shipped' }}
+                  </button>
+
+                  <div v-if="shipErrors[o.id]" class="muted" style="margin-top:8px; color:var(--danger);">
+                    {{ shipErrors[o.id] }}
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="muted" style="font-size:12px;">
+                    Carrier: <strong>{{ o.shipping_carrier || '-' }}</strong>
+                  </div>
+                  <div class="muted" style="font-size:12px; margin-top:6px;">
+                    Tracking: <strong>{{ o.tracking_number || '-' }}</strong>
+                  </div>
+                  <div class="muted" style="font-size:12px; margin-top:6px;">
+                    Shipped at: <strong>{{ o.shipped_at ? formatDate(o.shipped_at) : '-' }}</strong>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
     </main>
   </div>
@@ -277,6 +291,39 @@ const email = ref('')
 const password = ref('')
 const loggedIn = ref(false)
 const loggingIn = ref(false)
+
+// ✅ login errors แยก field
+const loginEmailError = ref('')
+const loginPasswordError = ref('')
+const loginError = ref('')
+
+function clearLoginErrors() {
+  loginEmailError.value = ''
+  loginPasswordError.value = ''
+  loginError.value = ''
+}
+
+function applyAdminAuthError(e) {
+  const d = e?.data
+
+  if (d?.field === 'email') {
+    loginEmailError.value = d?.message || 'อีเมลผิด'
+    return
+  }
+  if (d?.field === 'password') {
+    loginPasswordError.value = d?.message || 'รหัสผ่านผิด'
+    return
+  }
+
+  if (d?.errors) {
+    if (Array.isArray(d.errors.email) && d.errors.email.length) loginEmailError.value = d.errors.email[0]
+    if (Array.isArray(d.errors.password) && d.errors.password.length) loginPasswordError.value = d.errors.password[0]
+    if (!loginEmailError.value && !loginPasswordError.value) loginError.value = d?.message || 'Login failed'
+    return
+  }
+
+  loginError.value = e?.message || 'Login failed'
+}
 
 const products = ref([])
 const orders = ref([])
@@ -362,7 +409,6 @@ async function markShipped(order) {
   }
 }
 
-
 const loadingProducts = ref(false)
 const creating = ref(false)
 const busyId = ref(null)
@@ -405,8 +451,17 @@ function setSuccess(msg) {
 
 async function login() {
   loggingIn.value = true
+  clearLoginErrors()
   error.value = ''
   success.value = ''
+
+  if (!email.value) loginEmailError.value = 'กรุณากรอกอีเมล'
+  if (!password.value) loginPasswordError.value = 'กรุณากรอกรหัสผ่าน'
+  if (loginEmailError.value || loginPasswordError.value) {
+    loggingIn.value = false
+    return
+  }
+
   try {
     await adminAuth.login(email.value, password.value)
     loggedIn.value = true
@@ -415,6 +470,8 @@ async function login() {
   } catch (e) {
     loggedIn.value = false
     products.value = []
+    orders.value = []
+    applyAdminAuthError(e)
   } finally {
     loggingIn.value = false
   }
@@ -427,7 +484,6 @@ async function logout() {
   orders.value = []
   ordersError.value = ''
 }
-
 
 async function loadProducts() {
   loadingProducts.value = true
@@ -448,7 +504,6 @@ async function refreshAll() {
   await loadProducts()
   await loadOrders()
 }
-
 
 async function create() {
   creating.value = true
@@ -597,6 +652,4 @@ input { background:#0b0c10; border:1px solid #22263a; color:#e7eaf0; border-radi
   border:1px solid #1b1e2e;
   background:#0b0c10;
 }
-
-
 </style>

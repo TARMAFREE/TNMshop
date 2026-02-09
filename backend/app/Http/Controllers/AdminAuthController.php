@@ -13,16 +13,30 @@ class AdminAuthController extends Controller
         $data = $request->validate([
             'email' => ['required','email'],
             'password' => ['required','string'],
+        ], [
+            'email.required' => 'กรุณากรอกอีเมล',
+            'email.email' => 'รูปแบบอีเมลไม่ถูกต้อง',
+            'password.required' => 'กรุณากรอกรหัสผ่าน',
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $email = strtolower(trim($data['email']));
 
-        if (
-            !$user ||
-            !$user->is_admin ||
-            !Hash::check($data['password'], $user->password)
-        ) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+        $user = User::where('email', $email)->first();
+
+        // ✅ Email ไม่ถูก (ไม่พบ user หรือไม่ใช่ admin)
+        if (!$user || !$user->is_admin) {
+            return response()->json([
+                'field' => 'email',
+                'message' => 'อีเมลผิด',
+            ], 401);
+        }
+
+        // ✅ Password ไม่ถูก
+        if (!Hash::check($data['password'], $user->password)) {
+            return response()->json([
+                'field' => 'password',
+                'message' => 'รหัสผ่านผิด',
+            ], 401);
         }
 
         $token = $user->createToken('admin')->plainTextToken;
